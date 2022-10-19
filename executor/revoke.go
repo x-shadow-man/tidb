@@ -271,7 +271,16 @@ func (e *RevokeExec) revokeTablePriv(internalSession sessionctx.Context, priv *a
 	}
 	sql := new(strings.Builder)
 	sqlexec.MustFormatSQL(sql, "UPDATE %n.%n SET ", mysql.SystemDB, mysql.TablePrivTable)
-	err = composeTablePrivUpdateForRevoke(internalSession, sql, priv.Priv, user, host, dbName, tblName)
+	isDelRow, err := composeTablePrivUpdateForRevoke(internalSession, sql, priv.Priv, user, host, dbName, tblName)
+	if err != nil {
+		return err
+	}
+
+	if isDelRow {
+		delSQL := new(strings.Builder)
+		sqlexec.MustFormatSQL(delSQL, "DELETE FROM %n.%n WHERE User=%? AND Host=%? AND DB=%? AND Table_name=%?", mysql.SystemDB, mysql.TablePrivTable, user, host, dbName, tblName)
+		_, err = internalSession.(sqlexec.SQLExecutor).ExecuteInternal(ctx, delSQL.String())
+	}
 	if err != nil {
 		return err
 	}
@@ -319,12 +328,12 @@ func privUpdateForRevoke(cur []string, priv mysql.PrivilegeType) ([]string, erro
 	return cur, nil
 }
 
-func composeTablePrivUpdateForRevoke(ctx sessionctx.Context, sql *strings.Builder, priv mysql.PrivilegeType, name string, host string, db string, tbl string) error {
+func composeTablePrivUpdateForRevoke(ctx sessionctx.Context, sql *strings.Builder, priv mysql.PrivilegeType, name string, host string, db string, tbl string) (bool, error) {
 	var newTablePriv, newColumnPriv []string
 
 	currTablePriv, currColumnPriv, err := getTablePriv(ctx, name, host, db, tbl)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if priv == mysql.AllPriv {
@@ -340,18 +349,21 @@ func composeTablePrivUpdateForRevoke(ctx sessionctx.Context, sql *strings.Builde
 		newTablePriv = SetFromString(currTablePriv)
 		newTablePriv, err = privUpdateForRevoke(newTablePriv, priv)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		newColumnPriv = SetFromString(currColumnPriv)
 		newColumnPriv, err = privUpdateForRevoke(newColumnPriv, priv)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
-
+	isDelCol := false
+	if len(newTablePriv) == 0 {
+		isDelCol = true
+	}
 	sqlexec.MustFormatSQL(sql, `Table_priv=%?, Column_priv=%?, Grantor=%?`, strings.Join(newTablePriv, ","), strings.Join(newColumnPriv, ","), ctx.GetSessionVars().User.String())
-	return nil
+	return isDelCol, nil
 }
 
 func composeColumnPrivUpdateForRevoke(ctx sessionctx.Context, sql *strings.Builder, priv mysql.PrivilegeType, name string, host string, db string, tbl string, col string) error {
