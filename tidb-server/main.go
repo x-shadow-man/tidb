@@ -168,9 +168,13 @@ var (
 )
 
 func main() {
-	help := flag.Bool("help", false, "show the usage")
+	//flag用于解析命令行选项,系统库
+	help := flag.Bool("help", false, "show the usage") //返回的是指针
+	//解析选项，必须调用
 	flag.Parse()
-	if *help {
+	//Go语言中的函数传参都是值拷贝，当我们想要修改某个变量的时候，我们可以创建一个指针指向该变量的地址。传递数据使用指针，而无需拷贝数据。
+	//类型指针不能进行偏移和运算。Go语言中的指针操作非常简单，只需要记住2个符号。&取地址和*(根据地址取值)
+	if *help { // 指针取值（根据指针去内存取值）
 		flag.Usage()
 		os.Exit(0)
 	}
@@ -180,7 +184,9 @@ func main() {
 		fmt.Println(printer.GetTiDBInfo())
 		os.Exit(0)
 	}
+	//注册tikv
 	registerStores()
+	//注册监控项
 	registerMetrics()
 	if variable.EnableTmpStorageOnOOM.Load() {
 		config.GetGlobalConfig().UpdateTempStoragePath()

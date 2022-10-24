@@ -1060,6 +1060,7 @@ func isAllRemovedConfigItems(items []string) bool {
 // For example, if you start TiDB by the command "./tidb-server --port=3000", the port number should be
 // overwritten to 3000 and ignore the port number in the config file.
 func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCmdArgs func(*Config)) {
+	//命令行及文件的配置存入内存，全局访问
 	cfg := GetGlobalConfig()
 	var err error
 	if confPath != "" {
@@ -1097,8 +1098,10 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 			os.Exit(1)
 		}
 	}
+	//命令行配置覆盖配置文件
 	enforceCmdArgs(cfg)
 
+	//配置文件校验，比如IndexLimit 范围检测
 	if err := cfg.Valid(); err != nil {
 		if !filepath.IsAbs(confPath) {
 			if tmp, err := filepath.Abs(confPath); err == nil {
